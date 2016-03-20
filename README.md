@@ -1,4 +1,4 @@
-[Garage Door Controller v1.1](https://github.com/andrewshilliday/garage-door-controller)
+[Garage Door Controller v2.0](https://github.com/andrewshilliday/garage-door-controller)
 ======================
 
 Monitor and control your garage doors from the web via a Raspberry Pi.
