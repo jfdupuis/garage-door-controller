@@ -2,7 +2,7 @@
 "alerts":
 {
 	"time_to_wait" : 10,
-	"alert_type" : "<smtp OR pushbullet",
+	"alert_type" : "<smtp OR pushbullet>",
 	"smtp":
 		{
 		"smtphost" : "<SMTP HOST>",
@@ -27,19 +27,25 @@
 	{
 		"left" : 
 			{
-			"name" : "Andrew",
+			"name" : "Sarah",
 			"relay_pin" : 23,
 			"state_pin" : 17,
+			"trig_pin" : 13,
+			"echo_pin" : 19,
 			"approx_time_to_close" : 10,
-			"approx_time_to_open" : 13
+			"approx_time_to_open" : 13,
+			"distance_from_sensor_to_car" : 100
 			},
 		"right" : 
 			{
-			"name" : "Nicole",
+			"name" : "Lior",
 			"relay_pin" : 24,
 			"state_pin" : 27,
+			"trig_pin" : 5,
+			"echo_pin" : 6,
 			"approx_time_to_close" : 10,
-			"approx_time_to_open" : 13
+			"approx_time_to_open" : 13,
+			"distance_from_sensor_to_car" : 100
 			}
 	}
 }

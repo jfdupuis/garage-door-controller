@@ -35,6 +35,9 @@ class Door(object):
         self.name = config['name']
         self.relay_pin = config['relay_pin']
         self.state_pin = config['state_pin']
+        self.trig_pin = config['trig_pin']
+        self.echo_pin = config['echo_pin']
+        self.distance_from_sensor_to_car = config['distance_from_sensor_to_car']
         self.time_to_close = config.get('time_to_close', 10)
         self.time_to_open = config.get('time_to_open', 10)
         self.open_time = time.time()
