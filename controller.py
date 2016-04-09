@@ -87,7 +87,7 @@ class Controller():
             door.last_state_time = time.time()
 
         self.alert_type = config['alerts']['alert_type']
-        self.ttw = config['alerts']['time_to_wait']
+        self.time_to_wait = config['alerts']['time_to_wait']
         if self.alert_type == 'smtp':
             self.use_smtp = False
             smtp_params = ("smtphost", "smtpport", "smtp_tls", "username",
@@ -109,14 +109,11 @@ class Controller():
                 door.last_state = new_state
                 door.last_state_time = time.time()
                 self.updateHandler.handle_updates()
-            if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.ttw:
+            if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
                 title = "%s's garage door open" % door.name
                 message = "%s's garage door has been open for %s" % (door.name,
                                                                      elapsed_time(100+int(time.time() - door.open_time)))
-                if self.alert_type == 'smtp':
-                    self.send_email(title, message)
-                elif self.alert_type == 'pushbullet':
-                    self.send_pushbullet(title, message)
+                self.send_alert(title, message)
                 door.msg_sent = True
 
             if new_state == 'closed':
@@ -124,12 +121,15 @@ class Controller():
                     title = "%s's garage doors closed" % door.name
                     message = "%s's garage door is now closed after %s "% (door.name,
                                                                            elapsed_time(100+int(time.time() - door.open_time)))
-                    if self.alert_type == 'smtp':
-                        self.send_email(title, message)
-                    elif self.alert_type == 'pushbullet':
-                        self.send_pushbullet(title, message)
+                    self.send_alert(title, message)
                 door.open_time = time.time()
                 door.msg_sent = False
+
+    def send_alert(self, title, message):
+        if self.alert_type == 'smtp':
+            self.send_email(title, message)
+        elif self.alert_type == 'pushbullet':
+            self.send_pushbullet(title, message)
 
     def send_email(self, title, message):
         if self.use_smtp:
@@ -175,10 +175,10 @@ class Controller():
         root.putChild('upd', self.updateHandler)
         root.putChild('cfg', ConfigHandler(self))
 
-        clk = ClickHandler(self)
+        click_handler = ClickHandler(self)
         args={self.config['site']['username']:self.config['site']['password']}
         checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
-        realm = HttpPasswordRealm(clk)
+        realm = HttpPasswordRealm(click_handler)
         p = portal.Portal(realm, [checker])
         credentialFactory = BasicCredentialFactory("Garage Door Controller")
         protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
