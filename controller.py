@@ -2,21 +2,25 @@ import time, syslog, uuid
 import smtplib
 import RPi.GPIO as gpio
 import json
-import httplib
+
+import sys
+if sys.version_info < (3,):
+    import httplib as httpclient
+else:
+    import http.client as httpclient
 
 from twisted.internet import task
 from twisted.internet import reactor
 from twisted.web import server
 from twisted.web.static import File
 from twisted.web.resource import Resource, IResource
-from zope.interface import implements
+from zope.interface import implementer
 
 from twisted.cred import checkers, portal
 from twisted.web.guard import HTTPAuthSessionWrapper, DigestCredentialFactory, BasicCredentialFactory
 
+@implementer(portal.IRealm)
 class HttpPasswordRealm(object):
-    implements(portal.IRealm)
-
     def __init__(self, myresource):
         self.myresource = myresource
 
@@ -82,7 +86,7 @@ class Controller():
         gpio.cleanup()
         gpio.setmode(gpio.BCM)
         self.config = config
-        self.doors = [Door(n,c) for (n,c) in config['doors'].items()]
+        self.doors = [Door(n,c) for (n,c) in list(config['doors'].items())]
         self.updateHandler = UpdateHandler(self)
         for door in self.doors:
             door.last_state = 'unknown'
@@ -154,13 +158,13 @@ class Controller():
         config = self.config['alerts']['pushbullet']
 
         if door.pb_iden != None:
-            conn = httplib.HTTPSConnection("api.pushbullet.com:443")
+            conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
             conn.request("DELETE", '/v2/pushes/' + door.pb_iden, "",
                          {'Authorization': 'Bearer ' + config['access_token'], 'Content-Type': 'application/json'})
             conn.getresponse()
             door.pb_iden = None
 
-        conn = httplib.HTTPSConnection("api.pushbullet.com:443")
+        conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
         conn.request("POST", "/v2/pushes",
              json.dumps({
                  "type": "note",
@@ -172,7 +176,7 @@ class Controller():
     def update_openhab(self, item, state):
         syslog.syslog("Updating openhab")
         config = self.config['openhab']
-        conn = httplib.HTTPConnection("%s:%s" % (config['server'], config['port']))
+        conn = httpclient.HTTPConnection("%s:%s" % (config['server'], config['port']))
         conn.request("PUT", "/rest/items/%s/state" % item, state)
         conn.getresponse()
 
@@ -194,8 +198,8 @@ class Controller():
     def run(self):
         task.LoopingCall(self.status_check).start(0.5)
         root = File('www')
-        root.putChild('upd', self.updateHandler)
-        root.putChild('cfg', ConfigHandler(self))
+        root.putChild(b'upd', self.updateHandler)
+        root.putChild(b'cfg', ConfigHandler(self))
 
         if self.config['config']['use_auth']:
             click_handler = ClickHandler(self)
@@ -205,9 +209,9 @@ class Controller():
             p = portal.Portal(realm, [checker])
             credentialFactory = BasicCredentialFactory("Garage Door Controller")
             protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
-            root.putChild('clk', protected_resource)
+            root.putChild(b'clk', protected_resource)
         else:
-            root.putChild('clk', ClickHandler(self))
+            root.putChild(b'clk', ClickHandler(self))
         site = server.Site(root)
         reactor.listenTCP(self.config['site']['port'], site)  # @UndefinedVariable
         reactor.run()  # @UndefinedVariable
@@ -219,10 +223,10 @@ class ClickHandler(Resource):
         Resource.__init__(self)
         self.controller = controller
 
-    def render(self, request):
-        door = request.args['id'][0]
+    def render_GET(self, request):
+        door = bytes.decode(request.args[b'id'][0])
         self.controller.toggle(door)
-        return 'OK'
+        return b'OK'
 
 class ConfigHandler(Resource):
     isLeaf = True
@@ -230,11 +234,11 @@ class ConfigHandler(Resource):
         Resource.__init__(self)
         self.controller = controller
 
-    def render(self, request):
+    def render_GET(self, request):
         request.setHeader('Content-Type', 'application/json')
 
-        return json.dumps([(d.id, d.name, d.last_state, d.last_state_time)
-                            for d in controller.doors])
+        return str.encode(json.dumps([(d.id, d.name, d.last_state, d.last_state_time)
+                            for d in controller.doors]))
 
 
 class UpdateHandler(Resource):
@@ -254,15 +258,15 @@ class UpdateHandler(Resource):
     def format_updates(self, request, update):
         response = json.dumps({'timestamp': int(time.time()), 'update':update})
         if hasattr(request, 'jsonpcallback'):
-            return request.jsonpcallback +'('+response+')'
+            return str.encode(request.jsonpcallback +'('+response+')')
         else:
-            return response
+            return str.encode(response)
 
     def send_updates(self, request, updates):
         request.write(self.format_updates(request, updates))
         request.finish()
 
-    def render(self, request):
+    def render_GET(self, request):
 
         # set the request content type
         request.setHeader('Content-Type', 'application/json')
@@ -271,16 +275,14 @@ class UpdateHandler(Resource):
         args = request.args
 
         # set jsonp callback handler name if it exists
-        if 'callback' in args:
-            request.jsonpcallback =  args['callback'][0]
+        if b'callback' in args:
+            request.jsonpcallback =  args[b'callback'][0]
 
         # set lastupdate if it exists
-        if 'lastupdate' in args:
-            request.lastupdate = float(args['lastupdate'][0])
+        if b'lastupdate' in args:
+            request.lastupdate = float(args[b'lastupdate'][0])
         else:
             request.lastupdate = 0
-
-            #print "request received " + str(request.lastupdate)
 
         # Can we accommodate this request now?
         updates = controller.get_updates(request.lastupdate)
