@@ -1,4 +1,4 @@
-import time, syslog
+import time, syslog, uuid
 import smtplib
 import RPi.GPIO as gpio
 import json
@@ -29,6 +29,7 @@ class Door(object):
     last_action = None
     last_action_time = None
     msg_sent = False
+    pb_iden = None
 
     def __init__(self, doorId, config):
         self.id = doorId
@@ -37,6 +38,7 @@ class Door(object):
         self.state_pin = config['state_pin']
         self.time_to_close = config.get('time_to_close', 10)
         self.time_to_open = config.get('time_to_open', 10)
+        self.openhab_name = config.get('openhab_name')
         self.open_time = time.time()
         gpio.setup(self.relay_pin, gpio.OUT)
         gpio.setup(self.state_pin, gpio.IN, pull_up_down=gpio.PUD_UP)
@@ -86,6 +88,7 @@ class Controller():
             door.last_state = 'unknown'
             door.last_state_time = time.time()
 
+        self.use_alerts = config['config']['use_alerts']
         self.alert_type = config['alerts']['alert_type']
         self.time_to_wait = config['alerts']['time_to_wait']
         if self.alert_type == 'smtp':
@@ -109,19 +112,23 @@ class Controller():
                 door.last_state = new_state
                 door.last_state_time = time.time()
                 self.updateHandler.handle_updates()
+                if self.config['config']['use_openhab'] and (new_state == "open" or new_state == "closed"):
+                    self.update_openhab(door.openhab_name, new_state)
             if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
-                title = "%s's garage door open" % door.name
-                message = "%s's garage door has been open for %s" % (door.name,
-                                                                     elapsed_time(100+int(time.time() - door.open_time)))
-                self.send_alert(title, message)
-                door.msg_sent = True
+                if self.use_alerts:
+                    title = "%s's garage door open" % door.name
+                    message = "%s's garage door has been open for %s" % (door.name,
+                                                                     elapsed_time(int(time.time() - door.open_time)))
+                    self.send_alert(title, message)
+                    door.msg_sent = True
 
             if new_state == 'closed':
-                if door.msg_sent == True:
-                    title = "%s's garage doors closed" % door.name
-                    message = "%s's garage door is now closed after %s "% (door.name,
-                                                                           elapsed_time(100+int(time.time() - door.open_time)))
-                    self.send_alert(title, message)
+                if self.use_alerts:
+                    if door.msg_sent == True:
+                        title = "%s's garage doors closed" % door.name
+                        message = "%s's garage door is now closed after %s "% (door.name,
+                                                                               elapsed_time(int(time.time() - door.open_time)))
+                        self.send_alert(title, message)
                 door.open_time = time.time()
                 door.msg_sent = False
 
@@ -142,9 +149,17 @@ class Controller():
             server.sendmail(config["username"], config["to_email"], message)
             server.close()
 
-    def send_pushbullet(self, title, message):
+    def send_pushbullet(self, door, title, message):
         syslog.syslog("Sending pushbutton message")
         config = self.config['alerts']['pushbullet']
+
+        if door.pb_iden != None:
+            conn = httplib.HTTPSConnection("api.pushbullet.com:443")
+            conn.request("DELETE", '/v2/pushes/' + door.pb_iden, "",
+                         {'Authorization': 'Bearer ' + config['access_token'], 'Content-Type': 'application/json'})
+            conn.getresponse()
+            door.pb_iden = None
+
         conn = httplib.HTTPSConnection("api.pushbullet.com:443")
         conn.request("POST", "/v2/pushes",
              json.dumps({
@@ -152,6 +167,13 @@ class Controller():
                  "title": title,
                  "body": message,
              }), {'Authorization': 'Bearer ' + config['access_token'], 'Content-Type': 'application/json'})
+        door.pb_iden = json.loads(conn.getresponse().read())['iden']
+
+    def update_openhab(self, item, state):
+        syslog.syslog("Updating openhab")
+        config = self.config['openhab']
+        conn = httplib.HTTPConnection("%s:%s" % (config['server'], config['port']))
+        conn.request("PUT", "/rest/items/%s/state" % item, state)
         conn.getresponse()
 
 
@@ -175,15 +197,17 @@ class Controller():
         root.putChild('upd', self.updateHandler)
         root.putChild('cfg', ConfigHandler(self))
 
-        click_handler = ClickHandler(self)
-        args={self.config['site']['username']:self.config['site']['password']}
-        checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
-        realm = HttpPasswordRealm(click_handler)
-        p = portal.Portal(realm, [checker])
-        credentialFactory = BasicCredentialFactory("Garage Door Controller")
-        protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
-        root.putChild('clk', protected_resource)
-
+        if self.config['config']['use_auth']:
+            click_handler = ClickHandler(self)
+            args={self.config['site']['username']:self.config['site']['password']}
+            checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
+            realm = HttpPasswordRealm(click_handler)
+            p = portal.Portal(realm, [checker])
+            credentialFactory = BasicCredentialFactory("Garage Door Controller")
+            protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
+            root.putChild('clk', protected_resource)
+        else:
+            root.putChild('clk', ClickHandler(self))
         site = server.Site(root)
         reactor.listenTCP(self.config['site']['port'], site)  # @UndefinedVariable
         reactor.run()  # @UndefinedVariable
