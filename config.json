@@ -23,9 +23,9 @@
 	"username":"user",
 	"password":"12345"
 	},
-"doors" : 
+"doors" :
 	{
-		"left" : 
+		"left" :
 			{
 			"name" : "Andrew",
 			"relay_pin" : 23,
@@ -33,7 +33,7 @@
 			"approx_time_to_close" : 10,
 			"approx_time_to_open" : 13
 			},
-		"right" : 
+		"right" :
 			{
 			"name" : "Nicole",
 			"relay_pin" : 24,
