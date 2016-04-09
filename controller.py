@@ -92,7 +92,7 @@ class Controller():
 
         self.use_alerts = config['config']['use_alerts']
         self.alert_type = config['alerts']['alert_type']
-        self.ttw = config['alerts']['time_to_wait']
+        self.time_to_wait = config['alerts']['time_to_wait']
         if self.alert_type == 'smtp':
             self.use_smtp = False
             smtp_params = ("smtphost", "smtpport", "smtp_tls", "username","password", "to_email")
@@ -116,35 +116,29 @@ class Controller():
                 door.last_state = new_state
                 door.last_state_time = time.time()
                 self.updateHandler.handle_updates()
-                if self.config['config']['use_openhab'] and (new_state == "open" or new_state == "closed"):
-                    self.update_openhab(door.openhab_name, new_state)
-            if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.ttw:
-                if self.use_alerts:
-                    title = "%s's garage door open" % door.name
-                    message = "%s's garage door has been open for %s" % (door.name,
-                                                                     elapsed_time(int(time.time() - door.open_time)))
-                    if self.alert_type == 'smtp':
-                        self.send_email(title, message)
-                    elif self.alert_type == 'pushbullet':
-                        self.send_pushbullet(door, title, message)
-                    elif self.alert_type == 'pushover':
-                        self.send_pushover(door, title, message)
-                    door.msg_sent = True
+            if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
+                title = "%s's garage door open" % door.name
+                message = "%s's garage door has been open for %s" % (door.name,
+                                                                     elapsed_time(100+int(time.time() - door.open_time)))
+                self.send_alert(door, title, message)
+                door.msg_sent = True
 
             if new_state == 'closed':
-                if self.use_alerts:
-                    if door.msg_sent == True:
-                        title = "%s's garage doors closed" % door.name
-                        message = "%s's garage door is now closed after %s "% (door.name,
-                                                                               elapsed_time(int(time.time() - door.open_time)))
-                        if self.alert_type == 'smtp':
-                            self.send_email(title, message)
-                        elif self.alert_type == 'pushbullet':
-                            self.send_pushbullet(door, title, message)
-                        elif self.alert_type == 'pushover':
-                            self.send_pushover(door, title, message)
+                if door.msg_sent == True:
+                    title = "%s's garage doors closed" % door.name
+                    message = "%s's garage door is now closed after %s "% (door.name,
+                                                                           elapsed_time(100+int(time.time() - door.open_time)))
+                    self.send_alert(door, title, message)
                 door.open_time = time.time()
                 door.msg_sent = False
+
+    def send_alert(self, door, title, message):
+        if self.alert_type == 'smtp':
+            self.send_email(title, message)
+        elif self.alert_type == 'pushbullet':
+            self.send_pushbullet(door, title, message)
+        elif self.alert_type == 'pushover':
+            self.send_pushover(door, title, message)
 
     def send_email(self, title, message):
         if self.use_smtp:
@@ -196,7 +190,6 @@ class Controller():
         conn.request("PUT", "/rest/items/%s/state" % item, state)
         conn.getresponse()
 
-
     def toggle(self, doorId):
         for d in self.doors:
             if d.id == doorId:
@@ -219,10 +212,10 @@ class Controller():
         root.putChild('cfg', ConfigHandler(self))
 
         if self.config['config']['use_auth']:
-            clk = ClickHandler(self)
+            click_handler = ClickHandler(self)
             args={self.config['site']['username']:self.config['site']['password']}
             checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
-            realm = HttpPasswordRealm(clk)
+            realm = HttpPasswordRealm(click_handler)
             p = portal.Portal(realm, [checker])
             credentialFactory = BasicCredentialFactory("Garage Door Controller")
             protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
