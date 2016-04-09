@@ -39,9 +39,9 @@
 	"username":"user",
 	"password":"12345"
 	},
-"doors" : 
+"doors" :
 	{
-		"left" : 
+		"left" :
 			{
 			"name" : "LEFT",
 			"relay_pin" : 23,
@@ -51,7 +51,7 @@
 			"approx_time_to_open" : 15,
 			"openhab_name" : "g_door_left"
 			},
-		"right" : 
+		"right" :
 			{
 			"name" : "RIGHT",
 			"relay_pin" : 24,

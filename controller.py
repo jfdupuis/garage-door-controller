@@ -196,6 +196,7 @@ class Controller():
         conn.request("PUT", "/rest/items/%s/state" % item, state)
         conn.getresponse()
 
+
     def toggle(self, doorId):
         for d in self.doors:
             if d.id == doorId:
