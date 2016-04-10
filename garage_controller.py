@@ -108,18 +108,20 @@ class Controller():
                 door.last_state_time = time.time()
                 self.updateHandler.handle_updates()
             if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
-                title = "%s's garage door open" % door.name
-                message = "%s's garage door has been open for %s" % (door.name,
-                                                                     elapsed_time(100+int(time.time() - door.open_time)))
-                self.send_alert(door, title, message)
-                door.msg_sent = True
+                if self.use_alerts:
+                    title = "%s's garage door open" % door.name
+                    elapsed_time = int(time.time() - door.open_time)
+                    message = "%s's garage door has been open for %s" % (door.name, format_seconds(elapsed_time))
+                    self.send_alert(door, title, message)
+                    door.msg_sent = True
 
             if new_state == 'closed':
-                if door.msg_sent == True:
-                    title = "%s's garage doors closed" % door.name
-                    message = "%s's garage door is now closed after %s "% (door.name,
-                                                                           elapsed_time(100+int(time.time() - door.open_time)))
-                    self.send_alert(door, title, message)
+                if self.use_alerts:
+                    if door.msg_sent == True:
+                        title = "%s's garage doors closed" % door.name
+                        elapsed_time = int(time.time() - door.open_time)
+                        message = "%s's garage door is now closed after %s "% (door.name, format_seconds(elapsed_time))
+                        self.send_alert(door, title, message)
                 door.open_time = time.time()
                 door.msg_sent = False
 
@@ -195,7 +197,7 @@ class Controller():
                 updates.append((d.id, d.last_state, d.last_state_time))
         return updates
 
-def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separator=' '):
+def format_seconds(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separator=' '):
     """
     Takes an amount of seconds and turns it into a human-readable amount of time.
     """
