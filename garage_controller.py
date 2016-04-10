@@ -19,6 +19,7 @@ class Door(object):
     def __init__(self, doorId, config):
         self.id = doorId
         self.name = config['name']
+        self.in_sentence = config['in_sentence']
         self.relay_pin = config['relay_pin']
         self.state_pin = config['state_pin']
         self.state_pin_closed_value = config.get('state_pin_closed_value', 0)
@@ -107,20 +108,22 @@ class Controller():
                 door.last_state = new_state
                 door.last_state_time = time.time()
                 self.updateHandler.handle_updates()
+                if self.config['config']['use_openhab'] and (new_state == "open" or new_state == "closed"):
+                    self.update_openhab(door.openhab_name, new_state)
             if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
                 if self.use_alerts:
-                    title = "%s's garage door open" % door.name
                     elapsed_time = int(time.time() - door.open_time)
-                    message = "%s's garage door has been open for %s" % (door.name, format_seconds(elapsed_time))
+                    title = "%s%s%s" % (door.name, door.in_sentence, new_state)
+                    message = "%s%shas been open for %s" % (door.name, door.in_sentence, format_seconds(elapsed_time))
                     self.send_alert(door, title, message)
                     door.msg_sent = True
 
             if new_state == 'closed':
                 if self.use_alerts:
                     if door.msg_sent == True:
-                        title = "%s's garage doors closed" % door.name
                         elapsed_time = int(time.time() - door.open_time)
-                        message = "%s's garage door is now closed after %s "% (door.name, format_seconds(elapsed_time))
+                        title = "%s%s%s" % (door.name, door.in_sentence, new_state)
+                        message = "%s%sis now closed after %s "% (door.name, door.in_sentence, format_seconds(elapsed_time))
                         self.send_alert(door, title, message)
                 door.open_time = time.time()
                 door.msg_sent = False
