@@ -10,26 +10,6 @@ if sys.version_info < (3,):
 else:
     import http.client as httpclient
 
-from twisted.internet import task
-from twisted.internet import reactor
-from twisted.web import server
-from twisted.web.static import File
-from twisted.web.resource import Resource, IResource
-from zope.interface import implementer
-
-from twisted.cred import checkers, portal
-from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
-
-@implementer(portal.IRealm)
-class HttpPasswordRealm(object):
-    def __init__(self, myresource):
-        self.myresource = myresource
-
-    def requestAvatar(self, user, mind, *interfaces):
-        if IResource in interfaces:
-            return (IResource, self.myresource, lambda: None)
-        raise NotImplementedError()
-
 class Door(object):
     last_action = None
     last_action_time = None
@@ -84,12 +64,10 @@ class Door(object):
 
 class Controller():
     def __init__(self, config):
-        gpio.setwarnings(False)
-        gpio.cleanup()
-        gpio.setmode(gpio.BCM)
+        self.init_gpio()
+
         self.config = config
         self.doors = [Door(n,c) for (n,c) in list(config['doors'].items())]
-        self.updateHandler = UpdateHandler(self)
         for door in self.doors:
             door.last_state = 'unknown'
             door.last_state_time = time.time()
@@ -99,7 +77,8 @@ class Controller():
         self.time_to_wait = config['alerts']['time_to_wait']
         if self.alert_type == 'smtp':
             self.use_smtp = False
-            smtp_params = ("smtphost", "smtpport", "smtp_tls", "username","password", "to_email")
+            smtp_params = ("smtphost", "smtpport", "smtp_tls", "username",
+                       "password", "to_email", "time_to_wait")
             self.use_smtp = ('smtp' in config['alerts']) and set(smtp_params) <= set(config['alerts']['smtp'])
             syslog.syslog("we are using SMTP")
         elif self.alert_type == 'pushbullet':
@@ -111,6 +90,14 @@ class Controller():
         else:
             self.alert_type = None
             syslog.syslog("No alerts configured")
+
+    def init_gpio(self):
+        gpio.setwarnings(False)
+        gpio.cleanup()
+        gpio.setmode(gpio.BCM)
+
+    def set_update_handler(self, update_handler):
+        self.updateHandler = update_handler
 
     def status_check(self):
         for door in self.doors:
@@ -208,122 +195,6 @@ class Controller():
                 updates.append((d.id, d.last_state, d.last_state_time))
         return updates
 
-    def run(self):
-        task.LoopingCall(self.status_check).start(0.5)
-        root = File('www')
-        root.putChild(b'st', StatusHandler(self))
-        root.putChild(b'upd', self.updateHandler)
-        root.putChild(b'cfg', ConfigHandler(self))
-
-        if self.config['config']['use_auth']:
-            click_handler = ClickHandler(self)
-            args={self.config['site']['username']:self.config['site']['password']}
-            checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
-            realm = HttpPasswordRealm(click_handler)
-            p = portal.Portal(realm, [checker])
-            credentialFactory = BasicCredentialFactory("Garage Door Controller")
-            protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
-            root.putChild(b'clk', protected_resource)
-        else:
-            root.putChild(b'clk', ClickHandler(self))
-        site = server.Site(root)
-        reactor.listenTCP(self.config['site']['port'], site)  # @UndefinedVariable
-        reactor.run()  # @UndefinedVariable
-
-class ClickHandler(Resource):
-    isLeaf = True
-
-    def __init__ (self, controller):
-        Resource.__init__(self)
-        self.controller = controller
-
-    def render_GET(self, request):
-        door = bytes.decode(request.args[b'id'][0])
-        self.controller.toggle(door)
-        return b'OK'
-
-class StatusHandler(Resource):
-    isLeaf = True
-
-    def __init__ (self, controller):
-        Resource.__init__(self)
-        self.controller = controller
-
-    def render(self, request):
-        door = request.args['id'][0]
-        for d in self.controller.doors:
-            if (d.id == door):
-                return d.last_state
-        return ''
-
-class ConfigHandler(Resource):
-    isLeaf = True
-    def __init__ (self, controller):
-        Resource.__init__(self)
-        self.controller = controller
-
-    def render_GET(self, request):
-        request.setHeader('Content-Type', 'application/json')
-
-        return str.encode(json.dumps([(d.id, d.name, d.last_state, d.last_state_time)
-                            for d in self.controller.doors]))
-
-
-class UpdateHandler(Resource):
-    isLeaf = True
-    def __init__(self, controller):
-        Resource.__init__(self)
-        self.delayed_requests = []
-        self.controller = controller
-
-    def handle_updates(self):
-        for request in self.delayed_requests:
-            updates = self.controller.get_updates(request.lastupdate)
-            if updates != []:
-                self.send_updates(request, updates)
-                self.delayed_requests.remove(request);
-
-    def format_updates(self, request, update):
-        response = json.dumps({'timestamp': int(time.time()), 'update':update})
-        if hasattr(request, 'jsonpcallback'):
-            return str.encode(request.jsonpcallback +'('+response+')')
-        else:
-            return str.encode(response)
-
-    def send_updates(self, request, updates):
-        request.write(self.format_updates(request, updates))
-        request.finish()
-
-    def render_GET(self, request):
-
-        # set the request content type
-        request.setHeader('Content-Type', 'application/json')
-
-        # set args
-        args = request.args
-
-        # set jsonp callback handler name if it exists
-        if b'callback' in args:
-            request.jsonpcallback =  args[b'callback'][0]
-
-        # set lastupdate if it exists
-        if b'lastupdate' in args:
-            request.lastupdate = float(args[b'lastupdate'][0])
-        else:
-            request.lastupdate = 0
-
-        # Can we accommodate this request now?
-        updates = self.controller.get_updates(request.lastupdate)
-        if updates != []:
-            return self.format_updates(request, updates)
-
-
-        request.notifyFinish().addErrback(lambda x: self.delayed_requests.remove(request))
-        self.delayed_requests.append(request)
-
-        # tell the client we're not done yet
-        return server.NOT_DONE_YET
-
 def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separator=' '):
     """
     Takes an amount of seconds and turns it into a human-readable amount of time.
@@ -354,9 +225,3 @@ def elapsed_time(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separ
 
     return separator.join(time)
 
-if __name__ == '__main__':
-    syslog.openlog('garage_controller')
-    config_file = open('config.json')
-    controller = Controller(json.load(config_file))
-    config_file.close()
-    controller.run()
