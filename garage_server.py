@@ -131,7 +131,7 @@ class UpdateHandler(Resource):
         # tell the client we're not done yet
         return server.NOT_DONE_YET
 
-if __name__ == '__main__':
+def main(args):
     syslog.openlog('garage_controller')
     config_file = open('config.json')
     config = json.load(config_file)
@@ -141,3 +141,8 @@ if __name__ == '__main__':
     garage_server = GarageDoorServer(controller, config)
     controller.set_update_handler(garage_server.updateHandler)
     garage_server.run()
+
+if __name__ == '__main__':
+    import sys
+    main(sys.argv[1:])
+
