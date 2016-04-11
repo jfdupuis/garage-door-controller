@@ -99,13 +99,10 @@ class Controller():
         for door in self.doors:
             new_state = door.get_state()
             if (door.last_state != new_state):
-                syslog.syslog('%s: %s => %s' % (door.name, door.last_state, new_state))
                 door.last_state = new_state
                 door.last_state_time = time.time()
-                if self.updateHandler is not None:
-                    self.updateHandler.handle_updates()
-                if self.config['config']['use_openhab'] and (new_state == "open" or new_state == "closed"):
-                    self.update_openhab(door.openhab_name, new_state)
+                self.notify_state_change(door, new_state)
+
             if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
                 if self.use_alerts:
                     elapsed_time = int(time.time() - door.open_time)
@@ -123,6 +120,13 @@ class Controller():
                         self.send_alert(title, message)
                 door.open_time = time.time()
                 door.msg_sent = False
+
+    def notify_state_change(self, door, new_state):
+        syslog.syslog('%s: %s => %s' % (door.name, door.last_state, new_state))
+        if self.updateHandler is not None:
+            self.updateHandler.handle_updates()
+        if self.config['config']['use_openhab'] and (new_state == "open" or new_state == "closed"):
+            self.update_openhab(door.openhab_name, new_state)
 
     def send_alert(self, title, message):
         if self.alert_type == 'smtp':
