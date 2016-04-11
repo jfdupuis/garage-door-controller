@@ -12,7 +12,8 @@ else:
 class Door(object):
     last_action = None
     last_action_time = 0
-    msg_sent = False
+    alert_sent = False
+    confirm_close = False
     pb_iden = None
 
     def __init__(self, doorId, config):
@@ -101,25 +102,28 @@ class Controller():
             if (door.last_state != new_state):
                 door.last_state = new_state
                 door.last_state_time = time.time()
+                door.alert_sent = False
                 self.notify_state_change(door, new_state)
 
-            if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
+            if new_state == 'open' and not door.alert_sent and time.time() - door.open_time >= self.time_to_wait + door.time_to_open:
                 if self.use_alerts:
                     elapsed_time = int(time.time() - door.open_time)
                     title = "%s%s%s" % (door.name, door.in_sentence, new_state)
                     message = "%s%shas been open for %s" % (door.name, door.in_sentence, format_seconds(elapsed_time))
                     self.send_alert(title, message)
-                    door.msg_sent = True
+                    door.alert_sent = True
+                    door.confirm_close = True
 
             if new_state == 'closed':
                 if self.use_alerts:
-                    if door.msg_sent == True:
+                    if door.confirm_close == True:
                         elapsed_time = int(time.time() - door.open_time)
                         title = "%s%s%s" % (door.name, door.in_sentence, new_state)
                         message = "%s%sis now closed after %s "% (door.name, door.in_sentence, format_seconds(elapsed_time))
                         self.send_alert(title, message)
                 door.open_time = time.time()
-                door.msg_sent = False
+                door.confirm_close = False
+                door.alert_sent = False
 
     def notify_state_change(self, door, new_state):
         syslog.syslog('%s: %s => %s' % (door.name, door.last_state, new_state))
