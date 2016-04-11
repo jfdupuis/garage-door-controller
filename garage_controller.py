@@ -12,7 +12,7 @@ else:
 
 class Door(object):
     last_action = None
-    last_action_time = None
+    last_action_time = 0
     msg_sent = False
     pb_iden = None
 
@@ -57,7 +57,7 @@ class Door(object):
             self.last_action_time = time.time()
         else:
             self.last_action = None
-            self.last_action_time = None
+            self.last_action_time = 0
 
         gpio.output(self.relay_pin, False)
         time.sleep(0.2)
@@ -66,7 +66,7 @@ class Door(object):
 class Controller():
     def __init__(self, config):
         self.init_gpio()
-
+        self.updateHandler = None
         self.config = config
         self.doors = [Door(n,c) for (n,c) in list(config['doors'].items())]
         for door in self.doors:
@@ -107,7 +107,8 @@ class Controller():
                 syslog.syslog('%s: %s => %s' % (door.name, door.last_state, new_state))
                 door.last_state = new_state
                 door.last_state_time = time.time()
-                self.updateHandler.handle_updates()
+                if self.updateHandler is not None:
+                    self.updateHandler.handle_updates()
                 if self.config['config']['use_openhab'] and (new_state == "open" or new_state == "closed"):
                     self.update_openhab(door.openhab_name, new_state)
             if new_state == 'open' and not door.msg_sent and time.time() - door.open_time >= self.time_to_wait:
