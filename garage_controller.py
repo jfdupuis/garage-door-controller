@@ -1,4 +1,5 @@
-import time, syslog
+import time
+import syslog
 import smtplib
 import RPi.GPIO as gpio
 import json
@@ -8,6 +9,7 @@ if sys.version_info < (3,):
     import httplib as httpclient
 else:
     import http.client as httpclient
+
 
 class Door(object):
     last_action = None
@@ -38,9 +40,9 @@ class Door(object):
                 return 'open'
             else:
                 return 'opening'
-        elif self.last_action ==  'close':
+        elif self.last_action == 'close':
             if time.time() - self.last_action_time >= self.time_to_close:
-                return 'open' # This state indicates a problem
+                return 'open'  # This state indicates a problem
             else:
                 return 'closing'
         else:
@@ -62,12 +64,13 @@ class Door(object):
         time.sleep(0.2)
         gpio.output(self.relay_pin, True)
 
+
 class Controller():
     def __init__(self, config):
         self.init_gpio()
         self.updateHandler = None
         self.config = config
-        self.doors = [Door(n,c) for (n,c) in list(config['doors'].items())]
+        self.doors = [Door(n, c) for (n, c) in list(config['doors'].items())]
         for door in self.doors:
             door.last_state = 'unknown'
             door.last_state_time = time.time()
@@ -78,8 +81,9 @@ class Controller():
         if self.alert_type == 'smtp':
             self.use_smtp = False
             smtp_params = ("smtphost", "smtpport", "smtp_tls", "username",
-                       "password", "to_email", "time_to_wait")
-            self.use_smtp = ('smtp' in config['alerts']) and set(smtp_params) == set(config['alerts']['smtp'])
+                           "password", "to_email", "time_to_wait")
+            self.use_smtp = ('smtp' in config['alerts']) and set(
+                smtp_params) == set(config['alerts']['smtp'])
             syslog.syslog("we are using SMTP")
         elif self.alert_type == 'pushbullet':
             self.pushbullet_access_token = config['alerts']['pushbullet']['access_token']
@@ -105,21 +109,24 @@ class Controller():
                 door.alert_sent = False
                 self.notify_state_change(door, new_state)
 
-            if new_state == 'open' and not door.alert_sent and time.time() - door.open_time >= self.time_to_wait + door.time_to_open:
+            if (new_state == 'open' and not door.alert_sent and
+                    time.time() - door.open_time >= self.time_to_wait + door.time_to_open):
                 if self.use_alerts:
                     elapsed_time = int(time.time() - door.open_time)
                     title = "%s%s%s" % (door.name, door.in_sentence, new_state)
-                    message = "%s%shas been open for %s" % (door.name, door.in_sentence, format_seconds(elapsed_time))
+                    message = "%s%shas been open for %s" % (
+                        door.name, door.in_sentence, format_seconds(elapsed_time))
                     self.send_alert(title, message)
                     door.alert_sent = True
                     door.confirm_close = True
 
             if new_state == 'closed':
                 if self.use_alerts:
-                    if door.confirm_close == True:
+                    if door.confirm_close is True:
                         elapsed_time = int(time.time() - door.open_time)
                         title = "%s%s%s" % (door.name, door.in_sentence, new_state)
-                        message = "%s%sis now closed after %s "% (door.name, door.in_sentence, format_seconds(elapsed_time))
+                        message = "%s%sis now closed after %s " % (
+                            door.name, door.in_sentence, format_seconds(elapsed_time))
                         self.send_alert(title, message)
                 door.open_time = time.time()
                 door.confirm_close = False
@@ -143,7 +150,7 @@ class Controller():
             syslog.syslog("Sending email message")
             config = self.config['alerts']['smtp']
             server = smtplib.SMTP(config["smtphost"], config["smtpport"])
-            if (config["smtp_tls"] == "True") :
+            if (config["smtp_tls"] == "True"):
                 server.starttls()
             server.login(config["username"], config["password"])
             server.sendmail(config["username"], config["to_email"], message)
@@ -153,20 +160,22 @@ class Controller():
         syslog.syslog("Sending pushbutton message")
         config = self.config['alerts']['pushbullet']
 
-        if door.pb_iden != None:
+        if door.pb_iden is not None:
             conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
             conn.request("DELETE", '/v2/pushes/' + door.pb_iden, "",
-                         {'Authorization': 'Bearer ' + config['access_token'], 'Content-Type': 'application/json'})
+                         {'Authorization': 'Bearer ' + config['access_token'],
+                          'Content-Type': 'application/json'})
             conn.getresponse()
             door.pb_iden = None
 
         conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
         conn.request("POST", "/v2/pushes",
-             json.dumps({
-                 "type": "note",
-                 "title": title,
-                 "body": message,
-             }), {'Authorization': 'Bearer ' + config['access_token'], 'Content-Type': 'application/json'})
+                     json.dumps({
+                         "type": "note",
+                         "title": title,
+                         "body": message,
+                     }), {'Authorization': 'Bearer ' + config['access_token'],
+                          'Content-Type': 'application/json'})
         door.pb_iden = json.loads(conn.getresponse().read())['iden']
 
     def update_openhab(self, item, state):
@@ -175,7 +184,6 @@ class Controller():
         conn = httpclient.HTTPConnection("%s:%s" % (config['server'], config['port']))
         conn.request("PUT", "/rest/items/%s/state" % item, state)
         conn.getresponse()
-
 
     def toggle(self, doorId):
         for d in self.doors:
@@ -191,7 +199,8 @@ class Controller():
                 updates.append((d.id, d.last_state, d.last_state_time))
         return updates
 
-def format_seconds(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, separator=' '):
+
+def format_seconds(seconds, suffixes=['y', 'w', 'd', 'h', 'm', 's'], add_s=False, separator=' '):
     """
     Takes an amount of seconds and turns it into a human-readable amount of time.
     """
@@ -220,4 +229,3 @@ def format_seconds(seconds, suffixes=['y','w','d','h','m','s'], add_s=False, sep
             break
 
     return separator.join(time)
-

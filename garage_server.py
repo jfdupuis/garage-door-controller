@@ -1,3 +1,5 @@
+from garage_controller import Controller
+
 import json
 import syslog
 import time
@@ -6,12 +8,11 @@ from twisted.cred import checkers, portal
 from twisted.internet import task
 from twisted.internet import reactor
 from twisted.web import server
-from twisted.web.guard import HTTPAuthSessionWrapper, DigestCredentialFactory, BasicCredentialFactory
+from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
 from twisted.web.resource import Resource, IResource
 from twisted.web.static import File
 from zope.interface import implementer
 
-from garage_controller import Controller, Door
 
 @implementer(portal.IRealm)
 class HttpPasswordRealm(object):
@@ -23,8 +24,9 @@ class HttpPasswordRealm(object):
             return (IResource, self.myresource, lambda: None)
         raise NotImplementedError()
 
+
 class GarageDoorServer:
-    def __init__ (self, controller, config):
+    def __init__(self, controller, config):
         self.controller = controller
         self.config = config
         self.updateHandler = UpdateHandler(self.controller)
@@ -37,7 +39,7 @@ class GarageDoorServer:
 
         if self.config['config']['use_auth']:
             click_handler = ClickHandler(self.controller)
-            args={self.config['site']['username']:self.config['site']['password']}
+            args = {self.config['site']['username']: self.config['site']['password']}
             checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
             realm = HttpPasswordRealm(click_handler)
             p = portal.Portal(realm, [checker])
@@ -54,7 +56,7 @@ class GarageDoorServer:
 class ClickHandler(Resource):
     isLeaf = True
 
-    def __init__ (self, controller):
+    def __init__(self, controller):
         Resource.__init__(self)
         self.controller = controller
 
@@ -63,9 +65,11 @@ class ClickHandler(Resource):
         self.controller.toggle(door)
         return b'OK'
 
+
 class ConfigHandler(Resource):
     isLeaf = True
-    def __init__ (self, controller):
+
+    def __init__(self, controller):
         Resource.__init__(self)
         self.controller = controller
 
@@ -73,11 +77,12 @@ class ConfigHandler(Resource):
         request.setHeader('Content-Type', 'application/json')
 
         return str.encode(json.dumps([(d.id, d.name, d.last_state, d.last_state_time)
-                            for d in self.controller.doors]))
+                                      for d in self.controller.doors]))
 
 
 class UpdateHandler(Resource):
     isLeaf = True
+
     def __init__(self, controller):
         Resource.__init__(self)
         self.delayed_requests = []
@@ -88,12 +93,12 @@ class UpdateHandler(Resource):
             updates = self.controller.get_updates(request.lastupdate)
             if updates != []:
                 self.send_updates(request, updates)
-                self.delayed_requests.remove(request);
+                self.delayed_requests.remove(request)
 
     def format_updates(self, request, update):
-        response = json.dumps({'timestamp': int(time.time()), 'update':update})
+        response = json.dumps({'timestamp': int(time.time()), 'update': update})
         if hasattr(request, 'jsonpcallback'):
-            return str.encode(request.jsonpcallback +'('+response+')')
+            return str.encode(request.jsonpcallback + '(' + response + ')')
         else:
             return str.encode(response)
 
@@ -111,7 +116,7 @@ class UpdateHandler(Resource):
 
         # set jsonp callback handler name if it exists
         if b'callback' in args:
-            request.jsonpcallback =  args[b'callback'][0]
+            request.jsonpcallback = args[b'callback'][0]
 
         # set lastupdate if it exists
         if b'lastupdate' in args:
@@ -124,12 +129,12 @@ class UpdateHandler(Resource):
         if updates != []:
             return self.format_updates(request, updates)
 
-
         request.notifyFinish().addErrback(lambda x: self.delayed_requests.remove(request))
         self.delayed_requests.append(request)
 
         # tell the client we're not done yet
         return server.NOT_DONE_YET
+
 
 def main(args):
     syslog.openlog('garage_controller')
@@ -145,4 +150,3 @@ def main(args):
 if __name__ == '__main__':
     import sys
     main(sys.argv[1:])
-
