@@ -1,29 +1,50 @@
 {
+	"build_systems":
+	[
+		{
+			"name": "SyncPi",
+			"shell_cmd": "rsync -e ssh -avz --delete-before --exclude='*__pycache__' --exclude='simRPi' --exclude='.git' . pi@garagepi:~/projects/garage-door-controller",
+			"working_dir": "${project_path}"
+		},
+		{
+			"cmd":
+			[
+				"/usr/local/bin/python3",
+				"-u",
+				"garage_server.py"
+			],
+			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
+			"name": "Run",
+			"working_dir": "${project_path}"
+		},
+		{
+			"cmd":
+			[
+				"/usr/local/bin/python3",
+				"-u",
+				"-m",
+				"unittest",
+				"test/test_garage_controller.py"
+			],
+			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
+			"name": "Test",
+			"working_dir": "${project_path}"
+		},
+		{
+			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
+			"name": "Anaconda Python Builder",
+			"selector": "source.python",
+			"shell_cmd": "\"python\" -u \"$file\""
+		}
+	],
 	"folders":
 	[
 		{
-			"path": ".",
-            "folder_exclude_patterns": ["__pycache__"],
+			"folder_exclude_patterns":
+			[
+				"__pycache__"
+			],
+			"path": "."
 		}
-	],
-	"build_systems":
-    [
-        {
-            "name": "SyncPi",
-            "shell_cmd": "rsync -e ssh -avz --delete-before --exclude='*__pycache__' --exclude='simRPi' --exclude='.git' . pi@garagepi:~/projects/garage-door-controller",
-            "working_dir": "${project_path}",
-        },
-        {
-            "name": "Run",
-            "cmd": ["/usr/local/bin/python3", "-u", "garage_server.py"],
-            "file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
-            "working_dir": "${project_path}",
-        },
-        {
-            "name": "Test",
-            "cmd": ["/usr/local/bin/python3", "-u", "-m", "unittest", "test/test_garage_controller.py"],
-            "file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
-            "working_dir": "${project_path}",
-        }
-    ]
+	]
 }
