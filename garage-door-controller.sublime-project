@@ -9,7 +9,7 @@
 		{
 			"cmd":
 			[
-				"/usr/local/bin/python3",
+				"python3",
 				"-u",
 				"garage_server.py"
 			],
@@ -20,7 +20,7 @@
 		{
 			"cmd":
 			[
-				"/usr/local/bin/python3",
+				"python3",
 				"-u",
 				"-m",
 				"unittest",
