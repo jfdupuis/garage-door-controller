@@ -1,3 +1,5 @@
 __pycache__
 *.pyc
 
+config_perso.json
+garage-door-controller.sublime-workspace

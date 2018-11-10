@@ -33,7 +33,7 @@ class ControllerTest(unittest.TestCase):
         for door in controller.doors:
             # Test initial values
             self.assertEqual(door.last_action, None)
-            self.assertEqual(door.last_action_time, 0)
+            self.assertEqual(door.last_action_time, None)
 
     @patch("RPi.GPIO.output", autospec=True)
     def test_toggle_relay(self, mock_output):

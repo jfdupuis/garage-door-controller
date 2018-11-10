@@ -5,6 +5,10 @@ import RPi.GPIO as gpio
 import json
 import urllib
 
+from email.mime.text import MIMEText
+from email.utils import formatdate
+from email.utils import make_msgid
+
 import sys
 if sys.version_info < (3,):
     import httplib as httpclient
@@ -14,7 +18,7 @@ else:
 
 class Door(object):
     last_action = None
-    last_action_time = 0
+    last_action_time = None
     alert_sent = False
     confirm_close = False
     pb_iden = None
@@ -60,14 +64,14 @@ class Door(object):
             self.last_action_time = time.time()
         else:
             self.last_action = None
-            self.last_action_time = 0
+            self.last_action_time = None
 
         gpio.output(self.relay_pin, False)
         time.sleep(0.2)
         gpio.output(self.relay_pin, True)
 
 
-class Controller():
+class Controller(object):
     def __init__(self, config):
         self.init_gpio()
         self.updateHandler = None
@@ -109,7 +113,6 @@ class Controller():
         for door in self.doors:
             new_state = door.get_state()
             if (door.last_state != new_state):
-                syslog.syslog('%s: %s => %s' % (door.name, door.last_state, new_state))
                 door.last_state = new_state
                 door.last_state_time = time.time()
                 door.alert_sent = False
@@ -154,56 +157,78 @@ class Controller():
             self.send_pushover(door, title, message)
 
     def send_email(self, title, message):
-        if self.use_smtp:
-            syslog.syslog("Sending email message")
-            config = self.config['alerts']['smtp']
-            server = smtplib.SMTP(config["smtphost"], config["smtpport"])
-            if (config["smtp_tls"] == "True"):
-                server.starttls()
-            server.login(config["username"], config["password"])
-            server.sendmail(config["username"], config["to_email"], message)
-            server.close()
+        try:
+            if self.use_smtp:
+                syslog.syslog("Sending email message")
+                config = self.config['alerts']['smtp']
+
+                message = MIMEText(message)
+                message['Date'] = formatdate()
+                message['From'] = config["username"]
+                message['To'] = config["to_email"]
+                message['Subject'] = config["subject"]
+                message['Message-ID'] = make_msgid()
+
+                server = smtplib.SMTP(config["smtphost"], config["smtpport"])
+                if (config["smtp_tls"] == "True"):
+                    server.starttls()
+                server.login(config["username"], config["password"])
+                server.sendmail(config["username"], config["to_email"], message.as_string())
+                server.close()
+        except Exception as inst:
+            sys.syslog("Error sending email: " + str(inst))
 
     def send_pushbullet(self, door, title, message):
-        syslog.syslog("Sending pushbutton message")
-        config = self.config['alerts']['pushbullet']
+        try:
+            syslog.syslog("Sending pushbutton message")
+            config = self.config['alerts']['pushbullet']
 
-        if door.pb_iden is not None:
+            if door.pb_iden is not None:
+                conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
+                conn.request("DELETE", '/v2/pushes/' + door.pb_iden, "",
+                             {'Authorization': 'Bearer ' + config['access_token'],
+                              'Content-Type': 'application/json'})
+                conn.getresponse()
+                door.pb_iden = None
+
             conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
-            conn.request("DELETE", '/v2/pushes/' + door.pb_iden, "",
-                         {'Authorization': 'Bearer ' + config['access_token'],
-                          'Content-Type': 'application/json'})
-            conn.getresponse()
-            door.pb_iden = None
+            conn.request("POST", "/v2/pushes",
+                         json.dumps({
+                             "type": "note",
+                             "title": title,
+                             "body": message,
+                         }), {'Authorization': 'Bearer ' + config['access_token'],
+                              'Content-Type': 'application/json'})
+            response = conn.getresponse().read()
+            door.pb_iden = json.loads(response)['iden']
+        except Exception as inst:
+            sys.syslog("Error sending to pushbullet: " + str(inst))
 
-        conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
-        conn.request("POST", "/v2/pushes",
-                     json.dumps({
-                         "type": "note",
-                         "title": title,
-                         "body": message,
-                     }), {'Authorization': 'Bearer ' + config['access_token'],
-                          'Content-Type': 'application/json'})
-        door.pb_iden = json.loads(conn.getresponse().read())['iden']
     def send_pushover(self, door, title, message):
-        syslog.syslog("Sending Pushover message")
-        config = self.config['alerts']['pushover']
-        conn = httpclient.HTTPSConnection("api.pushover.net:443")
-        conn.request("POST", "/1/messages.json",
-                urllib.urlencode({
-                    "token": config['api_key'],
-                    "user": config['user_key'],
-                    "title": title,
-                    "message": message,
-                }), { "Content-type": "application/x-www-form-urlencoded" })
-        conn.getresponse()
+        try:
+            syslog.syslog("Sending Pushover message")
+            config = self.config['alerts']['pushover']
+            conn = httpclient.HTTPSConnection("api.pushover.net:443")
+            conn.request("POST", "/1/messages.json",
+                         urllib.urlencode({
+                             "token": config['api_key'],
+                             "user": config['user_key'],
+                             "title": title,
+                             "message": message,
+                         }), {"Content-type": "application/x-www-form-urlencoded"})
+            conn.getresponse()
+        except Exception as inst:
+            sys.syslog("Error sending to pushover: " + str(inst))
 
     def update_openhab(self, item, state):
-        syslog.syslog("Updating openhab")
-        config = self.config['openhab']
-        conn = httpclient.HTTPConnection("%s:%s" % (config['server'], config['port']))
-        conn.request("PUT", "/rest/items/%s/state" % item, state)
-        conn.getresponse()
+        try:
+            syslog.syslog("Updating openhab")
+            config = self.config['openhab']
+            conn = httpclient.HTTPConnection("%s:%s" % (config['server'], config['port']))
+            conn.request("PUT", "/rest/items/%s/state" % item, state)
+            conn.getresponse()
+        except Exception as inst:
+            sys.syslog("Error updating openhab: " + str(inst))
 
     def toggle(self, doorId):
         for d in self.doors:
