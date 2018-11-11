@@ -20,14 +20,28 @@
 		{
 			"cmd":
 			[
+				"/usr/local/bin/python3",
+				"-u",
+				"-m",
+				"unittest",
+				"test/test_garage_controller.py",
+				"test/test_garage_server.py"
+			],
+			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
+			"name": "Test",
+			"working_dir": "${project_path}"
+		},
+		{
+			"cmd":
+			[
 				"python3",
 				"-u",
 				"-m",
 				"unittest",
-				"test/test_garage_controller.py"
+				"test/test_alerts.py"
 			],
 			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
-			"name": "Test",
+			"name": "Test Alert",
 			"working_dir": "${project_path}"
 		},
 		{
