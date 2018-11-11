@@ -176,7 +176,7 @@ class Controller(object):
                 server.sendmail(config["username"], config["to_email"], message.as_string())
                 server.close()
         except Exception as inst:
-            sys.syslog("Error sending email: " + str(inst))
+            syslog.syslog("Error sending email: " + str(inst))
 
     def send_pushbullet(self, door, title, message):
         try:
@@ -189,6 +189,7 @@ class Controller(object):
                              {'Authorization': 'Bearer ' + config['access_token'],
                               'Content-Type': 'application/json'})
                 conn.getresponse()
+                conn.close()
                 door.pb_iden = None
 
             conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
@@ -200,9 +201,10 @@ class Controller(object):
                          }), {'Authorization': 'Bearer ' + config['access_token'],
                               'Content-Type': 'application/json'})
             response = conn.getresponse().read()
-            door.pb_iden = json.loads(response)['iden']
+            door.pb_iden = json.loads(response.decode('utf-8'))['iden']
+            conn.close()
         except Exception as inst:
-            sys.syslog("Error sending to pushbullet: " + str(inst))
+            syslog.syslog("Error sending to pushbullet: " + str(inst))
 
     def send_pushover(self, door, title, message):
         try:
@@ -217,8 +219,9 @@ class Controller(object):
                              "message": message,
                          }), {"Content-type": "application/x-www-form-urlencoded"})
             conn.getresponse()
+            conn.close()
         except Exception as inst:
-            sys.syslog("Error sending to pushover: " + str(inst))
+            syslog.syslog("Error sending to pushover: " + str(inst))
 
     def update_openhab(self, item, state):
         try:
@@ -227,8 +230,9 @@ class Controller(object):
             conn = httpclient.HTTPConnection("%s:%s" % (config['server'], config['port']))
             conn.request("PUT", "/rest/items/%s/state" % item, state)
             conn.getresponse()
+            conn.close()
         except Exception as inst:
-            sys.syslog("Error updating openhab: " + str(inst))
+            syslog.syslog("Error updating openhab: " + str(inst))
 
     def toggle(self, doorId):
         for d in self.doors:

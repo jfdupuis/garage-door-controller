@@ -4,6 +4,8 @@ import json
 import syslog
 import time
 import subprocess
+import sys
+import re
 
 from twisted.cred import checkers, portal
 from twisted.internet import task
@@ -50,7 +52,9 @@ class GarageDoorServer:
 
         if self.config['config']['use_auth']:
             click_handler = ClickHandler(self.controller)
-            args = {self.config['site']['username']: self.config['site']['password']}
+            username = self.config['site']['username']
+            password = self.config['site']['password'].encode('utf-8')
+            args = {username: password}
             checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
             realm = HttpPasswordRealm(click_handler)
             p = portal.Portal(realm, [checker])
@@ -109,7 +113,6 @@ class ConfigHandler(Resource):
 
     def render_GET(self, request):
         request.setHeader('Content-Type', 'application/json')
-
         return str.encode(json.dumps([(d.id, d.name, d.last_state, d.last_state_time)
                                       for d in self.controller.doors]))
 
@@ -119,15 +122,18 @@ class UptimeHandler(Resource):
 
     def __init__(self, controller):
         Resource.__init__(self)
+        self.uptime_pattern = re.compile(b"([:.\\w]+)")
+
+    def getUptime(self):
+        uptime = subprocess.check_output(['uptime']).strip()
+        uptime = uptime.split(b",")[0]
+        result = self.uptime_pattern.findall(uptime)
+        return result[2]
 
     def render_GET(self, request):
         request.setHeader('Content-Type', 'application/json')
-        uptime = subprocess.check_output(['uptime', '-p']).strip()
-        uptime = uptime.replace("up ", "")
-        uptime = uptime.split(",")[0].replace(",", "").strip()
-        if (uptime == "up"):
-            uptime = "0 mins"
-        return json.dumps("Uptime: " + uptime)
+        uptime = self.getUptime()
+        return json.dumps("Uptime: %s" % uptime)
 
 
 class UpdateHandler(Resource):
@@ -188,7 +194,13 @@ class UpdateHandler(Resource):
 
 def main(args):
     syslog.openlog('garage_controller')
-    config_file = open('config.json')
+
+    config_filename = 'config.json'
+    if len(sys.argv) == 2:
+        config_filename = sys.argv[1]
+
+    syslog.syslog('Config file: %s' % config_filename)
+    config_file = open(config_filename)
     config = json.load(config_file)
     config_file.close()
 
@@ -199,5 +211,4 @@ def main(args):
 
 
 if __name__ == '__main__':
-    import sys
     main(sys.argv[1:])
