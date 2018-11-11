@@ -3,10 +3,12 @@ from garage_controller import Controller
 import json
 import syslog
 import time
+import subprocess
 
 from twisted.cred import checkers, portal
 from twisted.internet import task
 from twisted.internet import reactor
+from twisted.internet import ssl
 from twisted.web import server
 from twisted.web.guard import HTTPAuthSessionWrapper, BasicCredentialFactory
 from twisted.web.resource import Resource, IResource
@@ -31,11 +33,20 @@ class GarageDoorServer:
         self.config = config
         self.updateHandler = UpdateHandler(self.controller)
 
+    def get_config_with_default(self, config, param, default):
+        if not config:
+            return default
+        if param not in config:
+            return default
+        return config[param]
+
     def run(self):
         task.LoopingCall(self.controller.status_check).start(0.5)
         root = File('www')
+        root.putChild(b'st', StatusHandler(self))
         root.putChild(b'upd', self.updateHandler)
         root.putChild(b'cfg', ConfigHandler(self.controller))
+        root.putChild(b'upt', UptimeHandler(self))
 
         if self.config['config']['use_auth']:
             click_handler = ClickHandler(self.controller)
@@ -49,8 +60,16 @@ class GarageDoorServer:
         else:
             root.putChild(b'clk', ClickHandler(self.controller))
         site = server.Site(root)
-        reactor.listenTCP(self.config['site']['port'], site)  # @UndefinedVariable
-        reactor.run()  # @UndefinedVariable
+
+        if not self.get_config_with_default(self.config['config'], 'use_https', False):
+            reactor.listenTCP(self.config['site']['port'], site)  # @UndefinedVariable
+            reactor.run()  # @UndefinedVariable
+        else:
+            sslContext = ssl.DefaultOpenSSLContextFactory(
+                self.config['site']['ssl_key'], self.config['site']['ssl_cert'])
+            reactor.listenSSL(self.config['site']['port_secure'],
+                              site, sslContext)  # @UndefinedVariable
+            reactor.run()  # @UndefinedVariable
 
 
 class ClickHandler(Resource):
@@ -66,6 +85,21 @@ class ClickHandler(Resource):
         return b'OK'
 
 
+class StatusHandler(Resource):
+    isLeaf = True
+
+    def __init__(self, controller):
+        Resource.__init__(self)
+        self.controller = controller
+
+    def render(self, request):
+        door = request.args['id'][0]
+        for d in self.controller.doors:
+            if (d.id == door):
+                return d.last_state
+        return ''
+
+
 class ConfigHandler(Resource):
     isLeaf = True
 
@@ -78,6 +112,22 @@ class ConfigHandler(Resource):
 
         return str.encode(json.dumps([(d.id, d.name, d.last_state, d.last_state_time)
                                       for d in self.controller.doors]))
+
+
+class UptimeHandler(Resource):
+    isLeaf = True
+
+    def __init__(self, controller):
+        Resource.__init__(self)
+
+    def render_GET(self, request):
+        request.setHeader('Content-Type', 'application/json')
+        uptime = subprocess.check_output(['uptime', '-p']).strip()
+        uptime = uptime.replace("up ", "")
+        uptime = uptime.split(",")[0].replace(",", "").strip()
+        if (uptime == "up"):
+            uptime = "0 mins"
+        return json.dumps("Uptime: " + uptime)
 
 
 class UpdateHandler(Resource):
@@ -146,6 +196,7 @@ def main(args):
     garage_server = GarageDoorServer(controller, config)
     controller.set_update_handler(garage_server.updateHandler)
     garage_server.run()
+
 
 if __name__ == '__main__':
     import sys
