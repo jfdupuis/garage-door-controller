@@ -4,10 +4,12 @@ import unittest
 from unittest.mock import patch, call
 
 import json
+import random
 
 import sys
 sys.modules['RPi'] = __import__('simRPi')
 from garage_controller import Controller  # noqa
+from garage_controller import format_seconds  # noqa
 
 
 class MockUpdateHandler():
@@ -322,3 +324,8 @@ class ControllerTest(unittest.TestCase):
         self.assertEqual(mock_alert.call_count, 1)
         mock_notify.assert_called_once_with(controller, door, "closed")
         mock_notify.reset_mock()
+
+    def test_format_seconds(self):
+        for x in range(20):
+            sec = random.randint(0, 5000)
+            print("%s seconds, to formated seconds: %s" % (sec, format_seconds(sec)))
