@@ -11,7 +11,8 @@
 			[
 				"python3",
 				"-u",
-				"garage_server.py"
+				"garage_server_sim.py",
+				"config_perso.json"
 			],
 			"file_regex": "^[ ]*File \"(...*?)\", line ([0-9]*)",
 			"name": "Run",
