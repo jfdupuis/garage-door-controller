@@ -36,7 +36,8 @@
         "username":"user",
         "password":"12345",
         "ssl_key":"/home/pi/garage-door-controller-cert/localhost.key",
-        "ssl_cert":"/home/pi/garage-door-controller-cert/localhost.crt"
+        "ssl_cert":"/home/pi/garage-door-controller-cert/localhost.crt",
+        "monitor_only":false
     },
     "doors":{
         "left":{

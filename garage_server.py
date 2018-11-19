@@ -50,19 +50,20 @@ class GarageDoorServer:
         root.putChild(b'cfg', ConfigHandler(self.controller))
         root.putChild(b'upt', UptimeHandler(self))
 
-        if self.config['config']['use_auth']:
-            click_handler = ClickHandler(self.controller)
-            username = self.config['site']['username']
-            password = self.config['site']['password'].encode('utf-8')
-            args = {username: password}
-            checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
-            realm = HttpPasswordRealm(click_handler)
-            p = portal.Portal(realm, [checker])
-            credentialFactory = BasicCredentialFactory("Garage Door Controller")
-            protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
-            root.putChild(b'clk', protected_resource)
-        else:
-            root.putChild(b'clk', ClickHandler(self.controller))
+        if not self.config['site']['monitor_only']:
+            if self.config['config']['use_auth']:
+                click_handler = ClickHandler(self.controller)
+                username = self.config['site']['username']
+                password = self.config['site']['password'].encode('utf-8')
+                args = {username: password}
+                checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
+                realm = HttpPasswordRealm(click_handler)
+                p = portal.Portal(realm, [checker])
+                credentialFactory = BasicCredentialFactory("Garage Door Controller")
+                protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
+                root.putChild(b'clk', protected_resource)
+            else:
+                root.putChild(b'clk', ClickHandler(self.controller))
         site = server.Site(root)
 
         if not self.get_config_with_default(self.config['config'], 'use_https', False):
