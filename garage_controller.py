@@ -31,10 +31,11 @@ class Door(object):
         self.relay_pin = config['relay_pin']
         self.state_pin = config['state_pin']
         self.state_pin_closed_value = config.get('state_pin_closed_value', 0)
-        self.time_to_close = config.get('time_to_close', 10)
-        self.time_to_open = config.get('time_to_open', 10)
+        self.time_to_close = config.get('approx_time_to_close', 10)
+        self.time_to_open = config.get('approx_time_to_open', 10)
         self.openhab_name = config.get('openhab_name')
         self.open_time = time.time()
+        self.alert_sent_time = time.time()
         gpio.setup(self.relay_pin, gpio.OUT)
         gpio.setup(self.state_pin, gpio.IN, pull_up_down=gpio.PUD_UP)
         gpio.output(self.relay_pin, True)
@@ -85,6 +86,8 @@ class Controller(object):
         self.use_alerts = config['config']['use_alerts']
         self.alert_type = config['alerts']['alert_type']
         self.time_to_wait = config['alerts']['time_to_wait']
+        self.time_btw_alert_repeat = config['alerts']['time_btw_alert_repeat']
+        self.open_time_to_alert = config.get('open_time_to_alert', 30)
         if self.alert_type == 'smtp':
             self.use_smtp = False
             smtp_params = ("smtphost", "smtpport", "smtp_tls", "username",
@@ -119,8 +122,14 @@ class Controller(object):
                 door.alert_sent = False
                 self.notify_state_change(door, new_state)
 
+            send_open_alert = False
+            if (new_state == 'open') and door.alert_sent and (time.time() - door.alert_sent_time >= self.time_btw_alert_repeat):
+                send_open_alert = True
             if (new_state == 'open' and not door.alert_sent and
                     time.time() - door.open_time >= self.time_to_wait + door.time_to_open):
+                send_open_alert = True
+
+            if send_open_alert:
                 if self.use_alerts:
                     elapsed_time = int(time.time() - door.open_time)
                     title = "%s%s%s" % (door.name, door.in_sentence, new_state)
@@ -129,13 +138,14 @@ class Controller(object):
                     self.send_alert(door, title, message)
                     door.alert_sent = True
                     door.confirm_close = True
+                    door.alert_sent_time = time.time()
 
             if new_state == 'closed':
                 if self.use_alerts:
                     if door.confirm_close is True:
                         elapsed_time = int(time.time() - door.open_time)
                         title = "%s%s%s" % (door.name, door.in_sentence, new_state)
-                        message = "%s%sis now closed after %s " % (
+                        message = "%s%sis now closed being open for %s " % (
                             door.name, door.in_sentence, format_seconds(elapsed_time))
                         self.send_alert(door, title, message)
                 door.open_time = time.time()

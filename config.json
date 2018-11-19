@@ -7,6 +7,7 @@
     },
     "alerts":{
         "time_to_wait":10,
+        "time_btw_alert_repeat":300,
         "alert_type":null,
         "smtp":{
             "smtphost":"<SMTP HOST>",
