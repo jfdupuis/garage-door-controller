@@ -123,10 +123,11 @@ class Controller(object):
                 self.notify_state_change(door, new_state)
 
             send_open_alert = False
-            if (new_state == 'open') and door.alert_sent and (time.time() - door.alert_sent_time >= self.time_btw_alert_repeat):
+            if (new_state == 'open') and door.alert_sent and (
+                    time.time() - door.alert_sent_time >= self.time_btw_alert_repeat):
                 send_open_alert = True
-            if (new_state == 'open' and not door.alert_sent and
-                    time.time() - door.open_time >= self.time_to_wait + door.time_to_open):
+            if (new_state == 'open' and not door.alert_sent and time.time(
+            ) - door.open_time >= self.time_to_wait + door.time_to_open):
                 send_open_alert = True
 
             if send_open_alert:
@@ -144,7 +145,8 @@ class Controller(object):
                 if self.use_alerts:
                     if door.confirm_close is True:
                         elapsed_time = int(time.time() - door.open_time)
-                        title = "%s%s%s" % (door.name, door.in_sentence, new_state)
+                        title = "%s%s%s" % (
+                            door.name, door.in_sentence, new_state)
                         message = "%s%sis now closed being open for %s " % (
                             door.name, door.in_sentence, format_seconds(elapsed_time))
                         self.send_alert(door, title, message)
@@ -156,7 +158,8 @@ class Controller(object):
         syslog.syslog('%s: %s => %s' % (door.name, door.last_state, new_state))
         if self.updateHandler is not None:
             self.updateHandler.handle_updates()
-        if self.config['config']['use_openhab'] and (new_state == "open" or new_state == "closed"):
+        if self.config['config']['use_openhab'] and (
+                new_state == "open" or new_state == "closed"):
             self.update_openhab(door.openhab_name, new_state)
 
     def send_alert(self, door, title, message):
@@ -184,7 +187,8 @@ class Controller(object):
                 if (config["smtp_tls"] == "True"):
                     server.starttls()
                 server.login(config["username"], config["password"])
-                server.sendmail(config["username"], config["to_email"], message.as_string())
+                server.sendmail(config["username"],
+                                config["to_email"], message.as_string())
                 server.close()
         except Exception as inst:
             syslog.syslog("Error sending email: " + str(inst))
@@ -238,7 +242,8 @@ class Controller(object):
         try:
             syslog.syslog("Updating openhab")
             config = self.config['openhab']
-            conn = httpclient.HTTPConnection("%s:%s" % (config['server'], config['port']))
+            conn = httpclient.HTTPConnection(
+                "%s:%s" % (config['server'], config['port']))
             conn.request("PUT", "/rest/items/%s/state" % item, state)
             conn.getresponse()
             conn.close()

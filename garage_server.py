@@ -56,18 +56,23 @@ class GarageDoorServer:
                 username = self.config['site']['username']
                 password = self.config['site']['password'].encode('utf-8')
                 args = {username: password}
-                checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(**args)
+                checker = checkers.InMemoryUsernamePasswordDatabaseDontUse(
+                    **args)
                 realm = HttpPasswordRealm(click_handler)
                 p = portal.Portal(realm, [checker])
-                credentialFactory = BasicCredentialFactory("Garage Door Controller")
-                protected_resource = HTTPAuthSessionWrapper(p, [credentialFactory])
+                credentialFactory = BasicCredentialFactory(
+                    "Garage Door Controller")
+                protected_resource = HTTPAuthSessionWrapper(
+                    p, [credentialFactory])
                 root.putChild(b'clk', protected_resource)
             else:
                 root.putChild(b'clk', ClickHandler(self.controller))
         site = server.Site(root)
 
-        if not self.get_config_with_default(self.config['config'], 'use_https', False):
-            reactor.listenTCP(self.config['site']['port'], site)  # @UndefinedVariable
+        if not self.get_config_with_default(
+                self.config['config'], 'use_https', False):
+            # @UndefinedVariable
+            reactor.listenTCP(self.config['site']['port'], site)
             reactor.run()  # @UndefinedVariable
         else:
             sslContext = ssl.DefaultOpenSSLContextFactory(
@@ -153,7 +158,8 @@ class UpdateHandler(Resource):
                 self.delayed_requests.remove(request)
 
     def format_updates(self, request, update):
-        response = json.dumps({'timestamp': int(time.time()), 'update': update})
+        response = json.dumps(
+            {'timestamp': int(time.time()), 'update': update})
         if hasattr(request, 'jsonpcallback'):
             return str.encode(request.jsonpcallback + '(' + response + ')')
         else:
@@ -186,7 +192,8 @@ class UpdateHandler(Resource):
         if updates != []:
             return self.format_updates(request, updates)
 
-        request.notifyFinish().addErrback(lambda x: self.delayed_requests.remove(request))
+        request.notifyFinish().addErrback(
+            lambda x: self.delayed_requests.remove(request))
         self.delayed_requests.append(request)
 
         # tell the client we're not done yet
