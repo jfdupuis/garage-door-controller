@@ -26,8 +26,8 @@ class ControllerTest(unittest.TestCase):
         controller = Controller(self.config)
         for door in controller.doors:
             self.assertEqual(door.pb_iden, None)
-            controller.send_alert(door, "Test alert", "A simple test to verify alert.")
+            controller.send_alert(door, "Test alert", "A simple test to verify alert 1.")
 
         for door in controller.doors:
             self.assertNotEqual(door.pb_iden, None)
-            controller.send_alert(door, "Test alert", "A simple test to verify alert.")
+            controller.send_alert(door, "Test alert", "A simple test to verify alert 2.")

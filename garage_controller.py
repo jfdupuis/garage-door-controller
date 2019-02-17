@@ -199,25 +199,28 @@ class Controller(object):
             config = self.config['alerts']['pushbullet']
 
             if door.pb_iden is not None:
-                conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
-                conn.request("DELETE", '/v2/pushes/' + door.pb_iden, "",
-                             {'Authorization': 'Bearer ' + config['access_token'],
-                              'Content-Type': 'application/json'})
-                conn.getresponse()
-                conn.close()
+                for token in config['access_token']:
+                    conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
+                    conn.request("DELETE", '/v2/pushes/' + door.pb_iden, "",
+                                 {'Authorization': 'Bearer ' + token,
+                                  'Content-Type': 'application/json'})
+                    conn.getresponse()
+                    conn.close()
                 door.pb_iden = None
 
-            conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
-            conn.request("POST", "/v2/pushes",
-                         json.dumps({
-                             "type": "note",
-                             "title": title,
-                             "body": message,
-                         }), {'Authorization': 'Bearer ' + config['access_token'],
-                              'Content-Type': 'application/json'})
-            response = conn.getresponse().read()
-            door.pb_iden = json.loads(response.decode('utf-8'))['iden']
-            conn.close()
+            for token in config['access_token']:
+                conn = httpclient.HTTPSConnection("api.pushbullet.com:443")
+                conn.request("POST", "/v2/pushes",
+                             json.dumps({
+                                 "type": "note",
+                                 "title": title,
+                                 "body": message,
+                             }), {'Authorization': 'Bearer ' + token,
+                                  'Content-Type': 'application/json'})
+                response = conn.getresponse().read()
+                door.pb_iden = json.loads(response.decode('utf-8'))['iden']
+                conn.close()
+
         except Exception as inst:
             syslog.syslog("Error sending to pushbullet: " + str(inst))
 
